@@ -1,75 +1,177 @@
-# ShopFlow: E-Commerce REST API to PostgreSQL ETL
+# ShopFlow | E-Commerce ETL Pipeline
 
-An executable Python/Pandas/PostgreSQL ETL portfolio project with REST ingestion, resilient HTTP retries, data validation, a dimensional star schema, idempotent upserts, run auditing, and analytical SQL.
+**Python • Pandas • PostgreSQL • REST APIs • Docker • SQL**
+
+## Project Overview
+
+ShopFlow is a Python-based ETL (Extract, Transform, Load) pipeline designed to automate the ingestion, cleaning, transformation, and storage of e-commerce data.
+
+The pipeline extracts JSON records from REST APIs, processes them using Pandas, and loads structured data into PostgreSQL using a dimensional Star Schema.
 
 ## Architecture
 
 ```text
-DummyJSON /carts REST API
-    |  GET /carts?limit=20&skip=0 ... (pagination, timeout, retries)
-    v
-Extract (requests) -> Transform (pandas + Decimal) -> Load (psycopg transaction)
-                                                        |
-                                                        v
-                                       PostgreSQL star schema
-                                 dim_customer   dim_product   dim_date
-                                            \      |      /
-                                            fact_order_items
-                                                        |
-                                                        v
-                                              SQL analytics queries
+E-Commerce REST API (DummyJSON)
+           |
+           v
+    EXTRACT (Requests)
+    - API pagination
+    - HTTP status validation
+    - Retry logic
+    - Exception handling
+           |
+           v
+    TRANSFORM (Pandas)
+    - Missing-value handling
+    - Data type standardization
+    - Duplicate removal
+    - Data validation
+           |
+           v
+    LOAD (PostgreSQL)
+    - Fact table
+    - Dimension tables
+    - Transactional upserts
+           |
+           v
+    SQL ANALYTICS
+    - Sales analysis
+    - Product performance
+    - Customer spending
 ```
 
-## Run locally
+## Tech Stack
 
-Prerequisites: Python 3.10+, Docker with Docker Compose, internet connection.
+| Technology | Purpose |
+|---|---|
+| Python | ETL pipeline development |
+| Requests | REST API integration |
+| Pandas | Data cleaning and transformation |
+| PostgreSQL | Relational database |
+| SQL | Data modeling and analytics |
+| Docker | Database environment |
+| Pytest | Automated testing |
+
+## Key Features
+
+- Automated extraction of paginated JSON data from REST APIs.
+- HTTP status-code validation, exception handling, and retry mechanisms.
+- Data cleaning, missing-value handling, and type standardization.
+- Duplicate detection and removal.
+- PostgreSQL Star Schema with fact and dimension tables.
+- Transactional database loading with idempotent upserts.
+- ETL execution auditing.
+- SQL queries for analytical reporting.
+
+## Database Design
+
+**Fact Table**
+
+`fact_order_items`
+
+Stores order-product records, quantities, unit prices, and line totals.
+
+**Dimension Tables**
+
+- `dim_customer`: Customer identifiers.
+- `dim_product`: Product information and observed prices.
+- `dim_date`: ETL snapshot dates.
+
+**Audit Table**
+
+`etl_runs`: Tracks pipeline execution outcomes and errors.
+
+## Installation and Setup
+
+### 1. Clone the Repository
 
 ```bash
-cp .env.example .env
-# Windows PowerShell: Copy-Item .env.example .env
+git clone https://github.com/YOUR_USERNAME/ShopFlow.git
+cd ShopFlow
+```
+
+Replace `YOUR_USERNAME` with your GitHub username after publishing the repository.
+
+### 2. Create a Virtual Environment
+
+```bash
 python -m venv .venv
-# macOS/Linux: source .venv/bin/activate
-# Windows PowerShell: .venv\Scripts\Activate.ps1
+```
+
+Activate it on Windows:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+### 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
+
+### 4. Configure Environment Variables
+
+Copy `.env.example` to `.env`.
+
+### 5. Start PostgreSQL
+
+```bash
 docker compose up -d
+```
+
+### 6. Execute the ETL Pipeline
+
+```bash
 python -m shopflow.main
-# Optional reproducible snapshot date:
-python -m shopflow.main --date 2026-11-13
+```
+
+### 7. Run Automated Tests
+
+```bash
 pytest -q
 ```
 
-Query results:
+## Data Quality and Reliability
 
-```bash
-docker compose exec -T postgres psql -U shopflow -d shopflow < sql/analytics.sql
-```
+ShopFlow validates incoming records before loading them into PostgreSQL.
 
-Windows PowerShell alternative:
+Invalid records, including missing identifiers, negative prices, and nonpositive quantities, are excluded.
 
-```powershell
-Get-Content sql/analytics.sql | docker compose exec -T postgres psql -U shopflow -d shopflow
-```
+Database transactions help prevent partial data loads, while upserts support repeatable execution without duplicating existing order-product records.
 
-## Star schema
+## Analytical Use Cases
 
-- `fact_order_items`: grain = **one order ID + product ID**. Measures: quantity, unit price, line total. Surrogate dimension foreign keys.
-- `dim_customer`: API user identifier.
-- `dim_product`: API product identifier, title, latest observed unit price.
-- `dim_date`: **ETL snapshot date**, not order date. DummyJSON carts do not supply purchase timestamps.
-- `etl_runs`: execution audit rows and error details.
+The curated data supports:
 
-## Data quality and operational behavior
+1. Product sales performance analysis.
+2. Customer spending analysis.
+3. Total revenue calculations.
+4. Order quantity analysis.
 
-- Retries GET requests for 429 and transient 5xx responses with backoff; checks HTTP errors, response structure, and pagination.
-- Drops invalid item lines (missing IDs, invalid/negative price, nonpositive quantity, blank title); rounds monetary amounts with `Decimal`.
-- Deduplicates on `(order_id, product_id)`; SQL upserts make repeated loads idempotent for the same cart data.
-- Database load runs inside a transaction; failures roll back data changes. A separate audit insert records run outcome when the database is reachable.
-- A product's latest observed title and price replace older dimension values. The fact preserves its own loaded unit price.
+**Note:** DummyJSON provides sample cart data rather than real transactions. The date dimension represents the ETL snapshot date, not the original purchase date.
 
-## Known limitations / next steps
+## Testing
 
-This is a **portfolio-ready baseline**, not a deployed production service. The DummyJSON API is sample data, not live sales. There is no authentic purchase date, order status, customer profile, historical product SCD, or incremental change feed. Snapshot date is only the ingestion date, so avoid interpreting the date report as historical daily sales. Full refresh reads all carts; production extensions would include orchestration, secrets management, structured monitoring, integration tests with ephemeral Postgres, incremental extraction, and a data warehouse deployment.
+The project includes automated tests for API extraction and data transformation.
 
-## Suggested resume description (after running and verifying)
+A successful local run should be verified using pipeline logs, PostgreSQL records, and SQL query outputs.
 
-Built a Python ETL pipeline that paginates e-commerce REST JSON, retries transient HTTP failures, validates and normalizes line items using Pandas, and transactionally upserts a PostgreSQL star schema with analytical queries and run audits.
+## Future Enhancements
+
+- Apache Airflow orchestration.
+- Incremental data extraction.
+- Cloud database deployment.
+- Structured monitoring and alerts.
+- Power BI or Streamlit dashboards.
+- CI/CD using GitHub Actions.
+
+## Author
+
+**ShopFlow | Data Engineering Portfolio Project**
+
+Built to demonstrate Python ETL development, REST API integration, data transformation, relational data modeling, and SQL analytics.
+
+## License
+
+Add a license file before public distribution.
